@@ -66,7 +66,7 @@ func TestComputeMac(t *testing.T) {
 
 	expectedDigest := []byte{0x18, 0x20, 0x3d, 0xff, 0x1e, 0x16, 0xf4, 0x92, 0xf2, 0xaf, 0xc8, 0x91, 0xa9, 0xba, 0xd6, 0xca, 0x9d, 0xee, 0x51, 0x93}
 
-	if bytes.Compare(td.Mac.Digest, expectedDigest) != 0 {
+	if !bytes.Equal(td.Mac.Digest, expectedDigest) {
 		t.Errorf("Computed incorrect MAC; expected MAC to be '%d' but got '%d'", expectedDigest, td.Mac.Digest)
 	}
 

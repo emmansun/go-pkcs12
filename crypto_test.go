@@ -47,7 +47,7 @@ func TestPbDecrypterFor(t *testing.T) {
 	ciphertext := make([]byte, len(plaintext))
 	cbc.CryptBlocks(ciphertext, plaintext)
 
-	if bytes.Compare(ciphertext, expectedCiphertext) != 0 {
+	if !bytes.Equal(ciphertext, expectedCiphertext) {
 		t.Errorf("bad ciphertext, got %x but wanted %x", ciphertext, expectedCiphertext)
 	}
 }
@@ -81,7 +81,7 @@ func TestPbEncrypterFor(t *testing.T) {
 	M := []byte{185, 73, 135, 249, 137, 1, 122, 247}
 	cbc.CryptBlocks(M, M)
 
-	if bytes.Compare(M, expectedM) != 0 {
+	if !bytes.Equal(M, expectedM) {
 		t.Errorf("expected M to be '%d', but found '%d", expectedM, M)
 	}
 }
@@ -166,7 +166,7 @@ func TestPbEncrypt(t *testing.T) {
 			t.Errorf("error encrypting %d: %v", c, err)
 		}
 
-		if bytes.Compare(td.data, expected[i]) != 0 {
+		if !bytes.Equal(td.data, expected[i]) {
 			t.Errorf("expected %d to be encrypted to %d, but found %d", c, expected[i], td.data)
 		}
 	}

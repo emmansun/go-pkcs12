@@ -17,8 +17,8 @@ import (
 	"errors"
 	"hash"
 
+	"github.com/emmansun/go-pkcs12/internal/rc2"
 	"golang.org/x/crypto/pbkdf2"
-	"software.sslmate.com/src/go-pkcs12/internal/rc2"
 )
 
 var (
