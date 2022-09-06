@@ -1,5 +1,6 @@
 # package pkcs12
 
+[![ci](https://github.com/emmansun/go-pkcs12/actions/workflows/ci.yml/badge.svg)](https://github.com/emmansun/go-pkcs12/actions/workflows/ci.yml)
 [![Documentation](https://pkg.go.dev/badge/software.sslmate.com/src/go-pkcs12)](https://pkg.go.dev/software.sslmate.com/src/go-pkcs12)
 
     import "software.sslmate.com/src/go-pkcs12" 
