@@ -28,6 +28,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+
+	"github.com/emmansun/gmsm/sm2"
+	"github.com/emmansun/gmsm/smx509"
 )
 
 // DefaultPassword is the string "changeit", a commonly-used password for
@@ -201,6 +204,11 @@ func convertBag(bag *safeBag, password []byte) (*pem.Block, error) {
 			if err != nil {
 				return nil, err
 			}
+		case *sm2.PrivateKey:
+			block.Bytes, err = smx509.MarshalSM2PrivateKey(key)
+			if err != nil {
+				return nil, err
+			}
 		default:
 			return nil, errors.New("found unknown private key type in PKCS#8 wrapping")
 		}
@@ -281,7 +289,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			certs, err := x509.ParseCertificates(certsData)
+			certs, err := smx509.ParseCertificates(certsData)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -290,9 +298,9 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 				return nil, nil, nil, err
 			}
 			if certificate == nil {
-				certificate = certs[0]
+				certificate = certs[0].ToX509()
 			} else {
-				caCerts = append(caCerts, certs[0])
+				caCerts = append(caCerts, certs[0].ToX509())
 			}
 
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
@@ -341,7 +349,7 @@ func DecodeTrustStore(pfxData []byte, password string) (certs []*x509.Certificat
 			if err != nil {
 				return nil, err
 			}
-			parsedCerts, err := x509.ParseCertificates(certsData)
+			parsedCerts, err := smx509.ParseCertificates(certsData)
 			if err != nil {
 				return nil, err
 			}
@@ -351,7 +359,7 @@ func DecodeTrustStore(pfxData []byte, password string) (certs []*x509.Certificat
 				return nil, err
 			}
 
-			certs = append(certs, parsedCerts[0])
+			certs = append(certs, parsedCerts[0].ToX509())
 
 		default:
 			return nil, errors.New("pkcs12: expected only certificate bags")

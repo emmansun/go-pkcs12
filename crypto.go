@@ -17,6 +17,8 @@ import (
 	"errors"
 	"hash"
 
+	"github.com/emmansun/gmsm/sm3"
+	"github.com/emmansun/gmsm/sm4"
 	"github.com/emmansun/go-pkcs12/internal/rc2"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -28,7 +30,9 @@ var (
 	oidPBKDF2                        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
 	oidHmacWithSHA1                  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 7})
 	oidHmacWithSHA256                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 9})
+	oidHmacWithSM3                   = asn1.ObjectIdentifier{1, 2, 156, 10197, 1, 401, 2}
 	oidAES256CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 42})
+	oidSM4CBC                        = asn1.ObjectIdentifier{1, 2, 156, 10197, 1, 104, 2}
 )
 
 // pbeCipher is an abstraction of a PKCS#12 cipher.
@@ -148,7 +152,7 @@ func pbDecrypt(info decryptable, password []byte) (decrypted []byte, err error) 
 	}
 	ps := decrypted[len(decrypted)-psLen:]
 	decrypted = decrypted[:len(decrypted)-psLen]
-	if bytes.Compare(ps, bytes.Repeat([]byte{byte(psLen)}, psLen)) != 0 {
+	if !bytes.Equal(ps, bytes.Repeat([]byte{byte(psLen)}, psLen)) {
 		return nil, ErrDecryption
 	}
 
@@ -203,19 +207,28 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher
 	switch {
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA256):
 		prf = sha256.New
+	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSM3):
+		prf = sm3.New
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA1):
 		prf = sha1.New
 	case kdfParams.Prf.Algorithm.Equal(asn1.ObjectIdentifier([]int{})):
 		prf = sha1.New
 	}
 
-	key := pbkdf2.Key(password, kdfParams.Salt.Bytes, kdfParams.Iterations, 32, prf)
 	iv := params.EncryptionScheme.Parameters.Bytes
 
 	var block cipher.Block
 	switch {
 	case params.EncryptionScheme.Algorithm.Equal(oidAES256CBC):
+		key := pbkdf2.Key(password, kdfParams.Salt.Bytes, kdfParams.Iterations, 32, prf)
 		b, err := aes.NewCipher(key)
+		if err != nil {
+			return nil, nil, err
+		}
+		block = b
+	case params.EncryptionScheme.Algorithm.Equal(oidSM4CBC):
+		key := pbkdf2.Key(password, kdfParams.Salt.Bytes, kdfParams.Iterations, 16, prf)
+		b, err := sm4.NewCipher(key)
 		if err != nil {
 			return nil, nil, err
 		}

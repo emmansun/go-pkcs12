@@ -11,8 +11,82 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"os"
+	"path"
+	"runtime"
 	"testing"
+
+	"github.com/emmansun/gmsm/sm2"
 )
+
+var sm2testdata = []struct {
+	commonName   string
+	filename     string
+	password     string
+	includeChain bool
+}{
+	{
+		"pkcs12-test",
+		"testdata/gmcert_pkcs12-withoutca.p12",
+		"123456",
+		false,
+	},
+	{
+		"test-withca",
+		"testdata/gmcert_pkcs12-test-withca.p12",
+		"123456",
+		true,
+	},
+}
+
+func readFile(p12file string) ([]byte, error) {
+	_, filename, _, _ := runtime.Caller(0)
+	filepath := path.Join(path.Dir(filename), p12file)
+	return os.ReadFile(filepath)
+}
+
+func TestSM2Pfx(t *testing.T) {
+	for i, tc := range sm2testdata {
+		p12data, err := readFile(tc.filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !tc.includeChain {
+			priv, cert, err := Decode(p12data, tc.password)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sm2Priv, ok := priv.(*sm2.PrivateKey)
+			if !ok {
+				t.Errorf("case %v, it's not a sm2 private key", i)
+			}
+			if !sm2Priv.PublicKey.Equal(cert.PublicKey) {
+				t.Errorf("case %v, public key is different", i)
+			}
+			if cert.Subject.CommonName != tc.commonName {
+				t.Errorf("case %v expected common name to be %q, but found %q", i, tc.commonName, cert.Subject.CommonName)
+			}
+		} else {
+			pk, cert, caCerts, err := DecodeChain(p12data, tc.password)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sm2Priv, ok := pk.(*sm2.PrivateKey)
+			if !ok {
+				t.Errorf("case %v, it's not a sm2 private key", i)
+			}
+			if !sm2Priv.PublicKey.Equal(cert.PublicKey) {
+				t.Errorf("case %v, public key is different", i)
+			}
+			if cert.Subject.CommonName != tc.commonName {
+				t.Errorf("case %v expected common name to be %q, but found %q", i, tc.commonName, cert.Subject.CommonName)
+			}
+			if len(caCerts) == 0 {
+				t.Errorf("case %v, ca cert expected", i)
+			}
+		}
+	}
+}
 
 func TestPfx(t *testing.T) {
 	for commonName, base64P12 := range testdata {

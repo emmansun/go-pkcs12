@@ -6,10 +6,11 @@
 package pkcs12
 
 import (
-	"crypto/x509"
 	"encoding/asn1"
 	"errors"
 	"io"
+
+	"github.com/emmansun/gmsm/smx509"
 )
 
 var (
@@ -40,7 +41,7 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{
 		return nil, errors.New("pkcs12: error unmarshaling decrypted private key: " + err.Error())
 	}
 
-	if privateKey, err = x509.ParsePKCS8PrivateKey(pkData); err != nil {
+	if privateKey, err = smx509.ParsePKCS8PrivateKey(pkData); err != nil {
 		return nil, errors.New("pkcs12: error parsing PKCS#8 private key: " + err.Error())
 	}
 
@@ -49,7 +50,7 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{
 
 func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, password []byte) (asn1Data []byte, err error) {
 	var pkData []byte
-	if pkData, err = x509.MarshalPKCS8PrivateKey(privateKey); err != nil {
+	if pkData, err = smx509.MarshalPKCS8PrivateKey(privateKey); err != nil {
 		return nil, errors.New("pkcs12: error encoding PKCS#8 private key: " + err.Error())
 	}
 
