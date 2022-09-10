@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/emmansun/gmsm/sm2"
+	"github.com/emmansun/gmsm/smx509"
 )
 
 var sm2testdata = []struct {
@@ -145,7 +145,7 @@ func TestTrustStore(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		pfxData, err := EncodeTrustStore(rand.Reader, []*x509.Certificate{cert}, "password")
+		pfxData, err := EncodeTrustStore(rand.Reader, []*smx509.Certificate{cert}, "password")
 		if err != nil {
 			t.Fatal(err)
 		}

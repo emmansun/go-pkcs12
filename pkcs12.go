@@ -257,8 +257,8 @@ func convertAttribute(attribute *pkcs12Attribute) (key, value string, err error)
 // assumes that there is only one certificate and only one private key in the
 // pfxData.  Since PKCS#12 files often contain more than one certificate, you
 // probably want to use [DecodeChain] instead.
-func Decode(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, err error) {
-	var caCerts []*x509.Certificate
+func Decode(pfxData []byte, password string) (privateKey interface{}, certificate *smx509.Certificate, err error) {
+	var caCerts []*smx509.Certificate
 	privateKey, certificate, caCerts, err = DecodeChain(pfxData, password)
 	if len(caCerts) != 0 {
 		err = errors.New("pkcs12: expected exactly two safe bags in the PFX PDU")
@@ -271,7 +271,7 @@ func Decode(pfxData []byte, password string) (privateKey interface{}, certificat
 // and only one private key in the pfxData.  The first certificate is assumed to
 // be the leaf certificate, and subsequent certificates, if any, are assumed to
 // comprise the CA certificate chain.
-func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
+func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *smx509.Certificate, caCerts []*smx509.Certificate, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
 		return nil, nil, nil, err
@@ -298,9 +298,9 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 				return nil, nil, nil, err
 			}
 			if certificate == nil {
-				certificate = certs[0].ToX509()
+				certificate = certs[0]
 			} else {
-				caCerts = append(caCerts, certs[0].ToX509())
+				caCerts = append(caCerts, certs[0])
 			}
 
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
@@ -328,7 +328,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 // DecodeTrustStore extracts the certificates from pfxData, which must be a DER-encoded
 // PKCS#12 file containing exclusively certificates with attribute 2.16.840.1.113894.746875.1.1,
 // which is used by Java to designate a trust anchor.
-func DecodeTrustStore(pfxData []byte, password string) (certs []*x509.Certificate, err error) {
+func DecodeTrustStore(pfxData []byte, password string) (certs []*smx509.Certificate, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
 		return nil, err
@@ -359,7 +359,7 @@ func DecodeTrustStore(pfxData []byte, password string) (certs []*x509.Certificat
 				return nil, err
 			}
 
-			certs = append(certs, parsedCerts[0].ToX509())
+			certs = append(certs, parsedCerts[0])
 
 		default:
 			return nil, errors.New("pkcs12: expected only certificate bags")
@@ -568,7 +568,7 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 // resulting Friendly Names (Aliases) will be identical, which Java may treat as
 // the same entry when used as a Java TrustStore, e.g. with `keytool`.  To
 // customize the Friendly Names, use [EncodeTrustStoreEntries].
-func EncodeTrustStore(rand io.Reader, certs []*x509.Certificate, password string) (pfxData []byte, err error) {
+func EncodeTrustStore(rand io.Reader, certs []*smx509.Certificate, password string) (pfxData []byte, err error) {
 	var certsWithFriendlyNames []TrustStoreEntry
 	for _, cert := range certs {
 		certsWithFriendlyNames = append(certsWithFriendlyNames, TrustStoreEntry{
@@ -581,7 +581,7 @@ func EncodeTrustStore(rand io.Reader, certs []*x509.Certificate, password string
 
 // TrustStoreEntry represents an entry in a Java TrustStore.
 type TrustStoreEntry struct {
-	Cert         *x509.Certificate
+	Cert         *smx509.Certificate
 	FriendlyName string
 }
 
