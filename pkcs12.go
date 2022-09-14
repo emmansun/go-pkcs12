@@ -465,7 +465,7 @@ func getSafeContents(p12Data, password []byte, expectedItems int) (bags []safeBa
 // 3DES  The private key bag and the end-entity certificate bag have the
 // LocalKeyId attribute set to the SHA-1 fingerprint of the end-entity
 // certificate.
-func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password string) (pfxData []byte, err error) {
+func Encode(rand io.Reader, privateKey interface{}, certificate *smx509.Certificate, caCerts []*smx509.Certificate, password string) (pfxData []byte, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
 		return nil, err
