@@ -3,7 +3,7 @@ module github.com/emmansun/go-pkcs12
 go 1.17
 
 require (
-	github.com/emmansun/gmsm v0.15.6
+	github.com/emmansun/gmsm v0.15.7
 	golang.org/x/crypto v0.6.0
 )
 
