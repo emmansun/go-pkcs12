@@ -1,6 +1,8 @@
 # package pkcs12
 
 [![ci](https://github.com/emmansun/go-pkcs12/actions/workflows/ci.yml/badge.svg)](https://github.com/emmansun/go-pkcs12/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/emmansun/go-pkcs12/branch/main/graph/badge.svg?token=VHMIKOQ5MP)](https://codecov.io/gh/emmansun/go-pkcs12)
+[![Go Report Card](https://goreportcard.com/badge/github.com/emmansun/go-pkcs12)](https://goreportcard.com/report/github.com/emmansun/go-pkcs12)
 [![Documentation](https://pkg.go.dev/badge/software.sslmate.com/src/go-pkcs12)](https://pkg.go.dev/software.sslmate.com/src/go-pkcs12)
 ![GitHub go.mod Go version (branch)](https://img.shields.io/github/go-mod/go-version/emmansun/go-pkcs12)
 [![Release](https://img.shields.io/github/release/emmansun/go-pkcs12/all.svg)](https://github.com/emmansun/go-pkcs12/releases)
