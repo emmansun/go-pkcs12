@@ -2,6 +2,8 @@
 
 [![ci](https://github.com/emmansun/go-pkcs12/actions/workflows/ci.yml/badge.svg)](https://github.com/emmansun/go-pkcs12/actions/workflows/ci.yml)
 [![Documentation](https://pkg.go.dev/badge/software.sslmate.com/src/go-pkcs12)](https://pkg.go.dev/software.sslmate.com/src/go-pkcs12)
+![GitHub go.mod Go version (branch)](https://img.shields.io/github/go-mod/go-version/emmansun/go-pkcs12)
+[![Release](https://img.shields.io/github/release/emmansun/go-pkcs12/all.svg)](https://github.com/emmansun/go-pkcs12/releases)
 
     import "github.com/emmansun/go-pkcs12" 
 
