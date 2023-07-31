@@ -1,5 +1,5 @@
-github.com/emmansun/gmsm v0.19.1 h1:/+3S2vd6t7yh+HkssSpRYm8RB7wqrZ7o8Ht3HQAUYZ0=
-github.com/emmansun/gmsm v0.19.1/go.mod h1:3MyXR2HCj9U3RN9AM5Q0+jvpveyoO+9ZpF/SnHLg9JE=
+github.com/emmansun/gmsm v0.19.2 h1:5kqggD/YV1MmRqKx/NCTZ8NUp8AG09KIaVD4kbaTPg4=
+github.com/emmansun/gmsm v0.19.2/go.mod h1:3MyXR2HCj9U3RN9AM5Q0+jvpveyoO+9ZpF/SnHLg9JE=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
