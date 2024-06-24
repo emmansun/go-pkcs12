@@ -55,7 +55,7 @@ func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, algoID as
 		return nil, errors.New("pkcs12: error encoding PKCS#8 private key: " + err.Error())
 	}
 
-	randomSalt := make([]byte, 8)
+	randomSalt := make([]byte, saltLen)
 	if _, err = rand.Read(randomSalt); err != nil {
 		return nil, errors.New("pkcs12: error reading random salt: " + err.Error())
 	}
