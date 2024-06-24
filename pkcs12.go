@@ -459,7 +459,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = x509.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
+			if privateKey, err = smx509.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
 				return nil, nil, nil, err
 			}
 
@@ -680,7 +680,7 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *smx509.Certifica
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = x509.MarshalPKCS8PrivateKey(privateKey); err != nil {
+		if keyBag.Value.Bytes, err = smx509.MarshalPKCS8PrivateKey(privateKey); err != nil {
 			return nil, err
 		}
 	} else {
