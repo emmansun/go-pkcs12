@@ -66,12 +66,53 @@ func TestSM2Pfx(t *testing.T) {
 			if cert.Subject.CommonName != tc.commonName {
 				t.Errorf("case %v expected common name to be %q, but found %q", i, tc.commonName, cert.Subject.CommonName)
 			}
+			// encode and decode with ShangMi2024
+			p12, err := ShangMi2024.Encode(sm2Priv, cert, nil, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			priv, cert, err = Decode(p12, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			sm2Priv, ok = priv.(*sm2.PrivateKey)
+			if !ok {
+				t.Errorf("case %v, it's not a sm2 private key", i)
+			}
+			if !sm2Priv.PublicKey.Equal(cert.PublicKey) {
+				t.Errorf("case %v, public key is different", i)
+			}
+			if cert.Subject.CommonName != tc.commonName {
+				t.Errorf("case %v expected common name to be %q, but found %q", i, tc.commonName, cert.Subject.CommonName)
+			}
 		} else {
 			pk, cert, caCerts, err := DecodeChain(p12data, tc.password)
 			if err != nil {
 				t.Fatal(err)
 			}
 			sm2Priv, ok := pk.(*sm2.PrivateKey)
+			if !ok {
+				t.Errorf("case %v, it's not a sm2 private key", i)
+			}
+			if !sm2Priv.PublicKey.Equal(cert.PublicKey) {
+				t.Errorf("case %v, public key is different", i)
+			}
+			if cert.Subject.CommonName != tc.commonName {
+				t.Errorf("case %v expected common name to be %q, but found %q", i, tc.commonName, cert.Subject.CommonName)
+			}
+			if len(caCerts) == 0 {
+				t.Errorf("case %v, ca cert expected", i)
+			}
+			// encode and decode with ShangMi2024
+			p12, err := ShangMi2024.Encode(sm2Priv, cert, caCerts, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pk, cert, caCerts, err = DecodeChain(p12, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			sm2Priv, ok = pk.(*sm2.PrivateKey)
 			if !ok {
 				t.Errorf("case %v, it's not a sm2 private key", i)
 			}
@@ -103,6 +144,40 @@ func TestPfx(t *testing.T) {
 
 		if cert.Subject.CommonName != commonName {
 			t.Errorf("expected common name to be %q, but found %q", commonName, cert.Subject.CommonName)
+		}
+	}
+}
+
+func TestPfxWithModernCiphers(t *testing.T) {
+	for commonName, base64P12 := range testdata {
+		p12, _ := base64.StdEncoding.DecodeString(base64P12)
+
+		priv, cert, err := Decode(p12, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := priv.(*rsa.PrivateKey).Validate(); err != nil {
+			t.Errorf("error while validating private key: %v", err)
+		}
+
+		if cert.Subject.CommonName != commonName {
+			t.Errorf("expected common name to be %q, but found %q", commonName, cert.Subject.CommonName)
+		}
+		
+		p12New, err := Modern2023.Encode(priv, cert, nil, "password")
+		if err != nil {
+			t.Fatal(err)
+		}
+		privNew, cerNew, err := Decode(p12New, "password")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := privNew.(*rsa.PrivateKey).Validate(); err != nil {
+			t.Errorf("error while validating private key: %v", err)
+		}
+		if cerNew.Subject.CommonName != commonName {
+			t.Errorf("expected common name to be %q, but found %q", commonName, cerNew.Subject.CommonName)
 		}
 	}
 }

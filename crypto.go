@@ -25,16 +25,16 @@ import (
 )
 
 var (
-	oidPBEWithSHAAnd3KeyTripleDESCBC = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 3})
-	oidPBEWithSHAAnd128BitRC2CBC     = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 5})
-	oidPBEWithSHAAnd40BitRC2CBC      = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 6})
+	oidPBEWithSHAAnd3KeyTripleDESCBC = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 3}) // PBE-SHA1-3DES
+	oidPBEWithSHAAnd128BitRC2CBC     = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 5}) // PBE-SHA1-RC2-128
+	oidPBEWithSHAAnd40BitRC2CBC      = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 6}) // PBE-SHA1-RC2-40
 	oidPBES2                         = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 13})
 	oidPBKDF2                        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
 	oidHmacWithSHA1                  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 7})
 	oidHmacWithSHA256                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 9})
 	oidHmacWithSM3                   = asn1.ObjectIdentifier([]int{1, 2, 156, 10197, 1, 401, 2})
 	oidAES128CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 2})
-	oidAES192CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 22})	
+	oidAES192CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 22})
 	oidAES256CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 42})
 	oidSM4CBC                        = asn1.ObjectIdentifier([]int{1, 2, 156, 10197, 1, 104, 2})
 )
@@ -103,7 +103,7 @@ func pbeCipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher.B
 	case algorithm.Algorithm.Equal(oidPBEWithSHAAnd3KeyTripleDESCBC):
 		cipherType = shaWithTripleDESCBC{}
 	case algorithm.Algorithm.Equal(oidPBEWithSHAAnd128BitRC2CBC):
-		cipherType = shaWith128BitRC2CBC{}		
+		cipherType = shaWith128BitRC2CBC{}
 	case algorithm.Algorithm.Equal(oidPBEWithSHAAnd40BitRC2CBC):
 		cipherType = shaWith40BitRC2CBC{}
 	case algorithm.Algorithm.Equal(oidPBES2):
@@ -205,6 +205,9 @@ type pbkdf2Params struct {
 	Prf        pkix.AlgorithmIdentifier
 }
 
+// pbes2CipherFor returns a cipher.Block for the given PBES2-params and password.
+// It only supports PBKDF2 with HMAC-SHA1, HMAC-SHA256, and HMAC-SM3.
+// EncryptionScheme only supports AES-128-CBC, AES-192-CBC, AES-256-CBC, and SM4-CBC.
 func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher.Block, []byte, error) {
 	var params pbes2Params
 	if err := unmarshal(algorithm.Parameters.FullBytes, &params); err != nil {
@@ -234,7 +237,7 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher
 	case kdfParams.Prf.Algorithm.Equal(asn1.ObjectIdentifier([]int{})):
 		prf = sha1.New
 	default:
-		return nil, nil, NotImplementedError("pbes2 prf " + kdfParams.Prf.Algorithm.String() + " is not supported")		
+		return nil, nil, NotImplementedError("pbes2 prf " + kdfParams.Prf.Algorithm.String() + " is not supported")
 	}
 
 	var keyLen int
@@ -310,10 +313,11 @@ type encryptable interface {
 	SetData([]byte)
 }
 
-func makePBES2Parameters(rand io.Reader, salt []byte, iterations int) ([]byte, error) {
+// makePBES2Parameters creates a PBES2-params structure.
+func makePBES2Parameters(prf, encryptionScheme asn1.ObjectIdentifier, rand io.Reader, salt []byte, iterations int) ([]byte, error) {
 	var err error
 
-	randomIV := make([]byte, 16)
+	randomIV := make([]byte, 16) // AES/SM4 block size
 	if _, err := rand.Read(randomIV); err != nil {
 		return nil, err
 	}
@@ -323,14 +327,14 @@ func makePBES2Parameters(rand io.Reader, salt []byte, iterations int) ([]byte, e
 		return nil, err
 	}
 	kdfparams.Iterations = iterations
-	kdfparams.Prf.Algorithm = oidHmacWithSHA256
+	kdfparams.Prf.Algorithm = prf
 
 	var params pbes2Params
 	params.Kdf.Algorithm = oidPBKDF2
 	if params.Kdf.Parameters.FullBytes, err = asn1.Marshal(kdfparams); err != nil {
 		return nil, err
 	}
-	params.EncryptionScheme.Algorithm = oidAES256CBC
+	params.EncryptionScheme.Algorithm = encryptionScheme
 	if params.EncryptionScheme.Parameters.FullBytes, err = asn1.Marshal(randomIV); err != nil {
 		return nil, err
 	}

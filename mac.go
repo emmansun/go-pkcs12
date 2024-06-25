@@ -12,6 +12,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"hash"
+
+	"github.com/emmansun/gmsm/sm3"
 )
 
 type macData struct {
@@ -29,6 +31,7 @@ type digestInfo struct {
 var (
 	oidSHA1   = asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26})
 	oidSHA256 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 1})
+	oidSM3    = asn1.ObjectIdentifier([]int{1, 2, 156, 10197, 1, 401})
 )
 
 func doMac(macData *macData, message, password []byte) ([]byte, error) {
@@ -41,6 +44,9 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA256):
 		hFn = sha256.New
 		key = pbkdf(sha256Sum, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(oidSM3):
+		hFn = sm3.New
+		key = pbkdf(sm3Sum, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	default:
 		return nil, NotImplementedError("unknown digest algorithm: " + macData.Mac.Algorithm.Algorithm.String())
 	}

@@ -9,6 +9,8 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"math/big"
+
+	"github.com/emmansun/gmsm/sm3"
 )
 
 var (
@@ -24,6 +26,12 @@ func sha1Sum(in []byte) []byte {
 // sha256Sum returns the SHA-256 hash of in.
 func sha256Sum(in []byte) []byte {
 	sum := sha256.Sum256(in)
+	return sum[:]
+}
+
+// sm3Sum returns the SM3 hash of in.
+func sm3Sum(in []byte) []byte {
+	sum := sm3.Sum(in)
 	return sum[:]
 }
 

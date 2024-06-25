@@ -46,9 +46,11 @@ const DefaultPassword = "changeit"
 // defines several different Encoders with different parameters.
 // An Encoder is safe for concurrent use by multiple goroutines.
 type Encoder struct {
-	macAlgorithm         asn1.ObjectIdentifier
-	certAlgorithm        asn1.ObjectIdentifier
-	keyAlgorithm         asn1.ObjectIdentifier
+	macAlgorithm         asn1.ObjectIdentifier // MAC algorithm: SHA1 or SHA256
+	certAlgorithm        asn1.ObjectIdentifier // Certificate encryption algorithm: PBES1 or PBES2
+	keyAlgorithm         asn1.ObjectIdentifier // Private Key encryption algorithm: PBES1 or PBES2
+	kdfPrf               asn1.ObjectIdentifier // PBES2 PBKDF2 PRF
+	encryptionScheme     asn1.ObjectIdentifier // PBES2 encryption scheme
 	macIterations        int
 	encryptionIterations int
 	saltLen              int
@@ -103,6 +105,8 @@ var LegacyRC2 = &Encoder{
 	macAlgorithm:         oidSHA1,
 	certAlgorithm:        oidPBEWithSHAAnd40BitRC2CBC,
 	keyAlgorithm:         oidPBEWithSHAAnd3KeyTripleDESCBC,
+	kdfPrf:               nil,
+	encryptionScheme:     nil,
 	macIterations:        1,
 	encryptionIterations: 2048,
 	saltLen:              8,
@@ -124,6 +128,8 @@ var LegacyDES = &Encoder{
 	macAlgorithm:         oidSHA1,
 	certAlgorithm:        oidPBEWithSHAAnd3KeyTripleDESCBC,
 	keyAlgorithm:         oidPBEWithSHAAnd3KeyTripleDESCBC,
+	kdfPrf:               nil,
+	encryptionScheme:     nil,
 	macIterations:        1,
 	encryptionIterations: 2048,
 	saltLen:              8,
@@ -137,10 +143,12 @@ var LegacyDES = &Encoder{
 //
 // When using this encoder, you MUST specify an empty password.
 var Passwordless = &Encoder{
-	macAlgorithm:  nil,
-	certAlgorithm: nil,
-	keyAlgorithm:  nil,
-	rand:          rand.Reader,
+	macAlgorithm:     nil,
+	certAlgorithm:    nil,
+	keyAlgorithm:     nil,
+	kdfPrf:           nil,
+	encryptionScheme: nil,
+	rand:             rand.Reader,
 }
 
 // Modern2023 encodes PKCS#12 files using algorithms that are considered modern
@@ -165,6 +173,23 @@ var Modern2023 = &Encoder{
 	macAlgorithm:         oidSHA256,
 	certAlgorithm:        oidPBES2,
 	keyAlgorithm:         oidPBES2,
+	kdfPrf:               oidHmacWithSHA256,
+	encryptionScheme:     oidAES256CBC,	
+	macIterations:        2048,
+	encryptionIterations: 2048,
+	saltLen:              16,
+	rand:                 rand.Reader,
+}
+
+// ShangMi2024 encodes PKCS#12 files using algorithms that are all ShangMi.
+// Private keys and certificates are encrypted using PBES2 with	 PBKDF2-HMAC-SM3 and SM4-CBC.
+// The MAC algorithm is HMAC-SM3. 
+var ShangMi2024 = &Encoder{
+	macAlgorithm:         oidSM3,
+	certAlgorithm:        oidPBES2,
+	keyAlgorithm:         oidPBES2,
+	kdfPrf:               oidHmacWithSM3,
+	encryptionScheme:     oidSM4CBC,
 	macIterations:        2048,
 	encryptionIterations: 2048,
 	saltLen:              16,
@@ -497,7 +522,7 @@ func DecodeTrustStore(pfxData []byte, password string) (certs []*smx509.Certific
 		return nil, err
 	}
 
-	bags, encodedPassword, err := getSafeContents(pfxData, encodedPassword, 1, 1)
+	bags, _, err := getSafeContents(pfxData, encodedPassword, 1, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -666,6 +691,7 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *smx509.Certifica
 		certBags = append(certBags, *certBag)
 	}
 
+	// Add all CA certificates to the cert bags.
 	for _, cert := range caCerts {
 		if certBag, err := makeCertBag(cert.Raw, []pkcs12Attribute{}); err != nil {
 			return nil, err
@@ -688,7 +714,7 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *smx509.Certifica
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(enc.rand, privateKey, enc.keyAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
+		if keyBag.Value.Bytes, err = enc.encodePkcs8ShroudedKeyBag(enc.rand, privateKey, encodedPassword); err != nil {
 			return nil, err
 		}
 	}
@@ -698,10 +724,10 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *smx509.Certifica
 	// The first SafeContents is encrypted and contains the cert bags.
 	// The second SafeContents is unencrypted and contains the shrouded key bag.
 	var authenticatedSafe [2]contentInfo
-	if authenticatedSafe[0], err = makeSafeContents(enc.rand, certBags, enc.certAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
+	if authenticatedSafe[0], err = enc.makeSafeContents(enc.rand, certBags, enc.certAlgorithm, encodedPassword); err != nil {
 		return nil, err
 	}
-	if authenticatedSafe[1], err = makeSafeContents(enc.rand, []safeBag{keyBag}, nil, nil, 0, 0); err != nil {
+	if authenticatedSafe[1], err = enc.makeSafeContents(enc.rand, []safeBag{keyBag}, nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -868,7 +894,7 @@ func (enc *Encoder) EncodeTrustStoreEntries(entries []TrustStoreEntry, password 
 	// Construct an authenticated safe with one SafeContent.
 	// The SafeContents is contains the cert bags.
 	var authenticatedSafe [1]contentInfo
-	if authenticatedSafe[0], err = makeSafeContents(enc.rand, certBags, enc.certAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
+	if authenticatedSafe[0], err = enc.makeSafeContents(enc.rand, certBags, enc.certAlgorithm, encodedPassword); err != nil {
 		return nil, err
 	}
 
@@ -917,7 +943,7 @@ func makeCertBag(certBytes []byte, attributes []pkcs12Attribute) (certBag *safeB
 	return
 }
 
-func makeSafeContents(rand io.Reader, bags []safeBag, algoID asn1.ObjectIdentifier, password []byte, iterations int, saltLen int) (ci contentInfo, err error) {
+func (encoder *Encoder) makeSafeContents(rand io.Reader, bags []safeBag, algoID asn1.ObjectIdentifier, password []byte) (ci contentInfo, err error) {
 	var data []byte
 	if data, err = asn1.Marshal(bags); err != nil {
 		return
@@ -932,7 +958,7 @@ func makeSafeContents(rand io.Reader, bags []safeBag, algoID asn1.ObjectIdentifi
 			return
 		}
 	} else {
-		randomSalt := make([]byte, saltLen)
+		randomSalt := make([]byte, encoder.saltLen)
 		if _, err = rand.Read(randomSalt); err != nil {
 			return
 		}
@@ -940,11 +966,11 @@ func makeSafeContents(rand io.Reader, bags []safeBag, algoID asn1.ObjectIdentifi
 		var algo pkix.AlgorithmIdentifier
 		algo.Algorithm = algoID
 		if algoID.Equal(oidPBES2) {
-			if algo.Parameters.FullBytes, err = makePBES2Parameters(rand, randomSalt, iterations); err != nil {
+			if algo.Parameters.FullBytes, err = makePBES2Parameters(encoder.kdfPrf, encoder.encryptionScheme, rand, randomSalt, encoder.encryptionIterations); err != nil {
 				return
 			}
 		} else {
-			if algo.Parameters.FullBytes, err = asn1.Marshal(pbeParams{Salt: randomSalt, Iterations: iterations}); err != nil {
+			if algo.Parameters.FullBytes, err = asn1.Marshal(pbeParams{Salt: randomSalt, Iterations: encoder.encryptionIterations}); err != nil {
 				return
 			}
 		}
