@@ -46,14 +46,14 @@ const DefaultPassword = "changeit"
 // defines several different Encoders with different parameters.
 // An Encoder is safe for concurrent use by multiple goroutines.
 type Encoder struct {
-	macAlgorithm         asn1.ObjectIdentifier // MAC algorithm: SHA1 or SHA256
-	certAlgorithm        asn1.ObjectIdentifier // Certificate encryption algorithm: PBES1 or PBES2
-	keyAlgorithm         asn1.ObjectIdentifier // Private Key encryption algorithm: PBES1 or PBES2
+	macAlgorithm         asn1.ObjectIdentifier // MAC digest algorithm: SHA1, SHA256 or SM3
+	certAlgorithm        asn1.ObjectIdentifier // Certificate encryption pbe: PKCS12-PBE or PBES2
+	keyAlgorithm         asn1.ObjectIdentifier // Private Key encryption pbe: PKCS12-PBE or PBES2
 	kdfPrf               asn1.ObjectIdentifier // PBES2 PBKDF2 PRF
 	encryptionScheme     asn1.ObjectIdentifier // PBES2 encryption scheme
-	macIterations        int
-	encryptionIterations int
-	saltLen              int
+	macIterations        int                   // MAC iteration count
+	encryptionIterations int                   // Encryption iteration count
+	saltLen              int                   // Length of salt for both MAC and encryption
 	rand                 io.Reader
 }
 
@@ -174,7 +174,7 @@ var Modern2023 = &Encoder{
 	certAlgorithm:        oidPBES2,
 	keyAlgorithm:         oidPBES2,
 	kdfPrf:               oidHmacWithSHA256,
-	encryptionScheme:     oidAES256CBC,	
+	encryptionScheme:     oidAES256CBC,
 	macIterations:        2048,
 	encryptionIterations: 2048,
 	saltLen:              16,
@@ -183,7 +183,7 @@ var Modern2023 = &Encoder{
 
 // ShangMi2024 encodes PKCS#12 files using algorithms that are all ShangMi.
 // Private keys and certificates are encrypted using PBES2 with	 PBKDF2-HMAC-SM3 and SM4-CBC.
-// The MAC algorithm is HMAC-SM3. 
+// The MAC algorithm is HMAC-SM3.
 var ShangMi2024 = &Encoder{
 	macAlgorithm:         oidSM3,
 	certAlgorithm:        oidPBES2,
