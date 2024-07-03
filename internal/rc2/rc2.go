@@ -14,7 +14,30 @@ package rc2
 import (
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
+	"unsafe"
 )
+
+// AnyOverlap reports whether x and y share memory at any (not necessarily
+// corresponding) index. The memory beyond the slice length is ignored.
+func AnyOverlap(x, y []byte) bool {
+	return len(x) > 0 && len(y) > 0 &&
+		uintptr(unsafe.Pointer(&x[0])) <= uintptr(unsafe.Pointer(&y[len(y)-1])) &&
+		uintptr(unsafe.Pointer(&y[0])) <= uintptr(unsafe.Pointer(&x[len(x)-1]))
+}
+
+// InexactOverlap reports whether x and y share memory at any non-corresponding
+// index. The memory beyond the slice length is ignored. Note that x and y can
+// have different lengths and still not have any inexact overlap.
+//
+// InexactOverlap can be used to implement the requirements of the crypto/cipher
+// AEAD, Block, BlockMode and Stream interfaces.
+func InexactOverlap(x, y []byte) bool {
+	if len(x) == 0 || len(y) == 0 || &x[0] == &y[0] {
+		return false
+	}
+	return AnyOverlap(x, y)
+}
 
 // The rc2 block size in bytes
 const BlockSize = 8
@@ -23,12 +46,23 @@ type rc2Cipher struct {
 	k [64]uint16
 }
 
-// New returns a new rc2 cipher with the given key and effective key length t1
-func New(key []byte, t1 int) (cipher.Block, error) {
-	// TODO(dgryski): error checking for key length
+// NewCipherWithEffectiveKeyBits returns a new rc2 cipher with the given key and effective key length in bits t1
+func NewCipherWithEffectiveKeyBits(key []byte, t1 int) (cipher.Block, error) {
+	kLen := len(key)
+	if kLen < 1 || kLen > 128 {
+		return nil, fmt.Errorf("rc2: invalid key size %d", kLen)
+	}
+	if t1 < 1 || t1 > 1024 {
+		return nil, fmt.Errorf("rc2: invalid effective key length %d", t1)
+	}
 	return &rc2Cipher{
 		k: expandKey(key, t1),
 	}, nil
+}
+
+// NewCipher returns a new rc2 cipher with the given key
+func NewCipher(key []byte) (cipher.Block, error) {
+	return NewCipherWithEffectiveKeyBits(key, len(key)*8)
 }
 
 func (*rc2Cipher) BlockSize() int { return BlockSize }
@@ -53,16 +87,15 @@ var piTable = [256]byte{
 }
 
 func expandKey(key []byte, t1 int) [64]uint16 {
-
 	l := make([]byte, 128)
 	copy(l, key)
 
 	var t = len(key)
-	var t8 = (t1 + 7) / 8
-	var tm = byte(255 % uint(1<<(8+uint(t1)-8*uint(t8))))
+	var t8 = (t1 + 7) / 8                                 // effective key length in bytes
+	var tm = byte(255 % uint(1<<(8+uint(t1)-8*uint(t8)))) // mask for the t1 rightmost bits of the last byte
 
-	for i := len(key); i < 128; i++ {
-		l[i] = piTable[l[i-1]+l[uint8(i-t)]]
+	for i := t; i < 128; i++ {
+		l[i] = piTable[l[i-1]+l[i-t]]
 	}
 
 	l[128-t8] = piTable[l[128-t8]&tm]
@@ -74,118 +107,140 @@ func expandKey(key []byte, t1 int) [64]uint16 {
 	var k [64]uint16
 
 	for i := range k {
-		k[i] = uint16(l[2*i]) + uint16(l[2*i+1])*256
+		k[i] = uint16(l[2*i]) | uint16(l[2*i+1])<<8
 	}
 
 	return k
 }
 
+// rotl16 rotates x left by b bits
 func rotl16(x uint16, b uint) uint16 {
 	return (x >> (16 - b)) | (x << b)
 }
 
 func (c *rc2Cipher) Encrypt(dst, src []byte) {
+	if len(src) < BlockSize {
+		panic("rc2: input not full block")
+	}
+	if len(dst) < BlockSize {
+		panic("rc2: output not full block")
+	}
+	if InexactOverlap(dst[:BlockSize], src[:BlockSize]) {
+		panic("rc2: invalid buffer overlap")
+	}
 
-	r0 := binary.LittleEndian.Uint16(src[0:])
-	r1 := binary.LittleEndian.Uint16(src[2:])
-	r2 := binary.LittleEndian.Uint16(src[4:])
-	r3 := binary.LittleEndian.Uint16(src[6:])
+	r0 := binary.LittleEndian.Uint16(src[0:2])
+	r1 := binary.LittleEndian.Uint16(src[2:4])
+	r2 := binary.LittleEndian.Uint16(src[4:6])
+	r3 := binary.LittleEndian.Uint16(src[6:BlockSize])
 
 	var j int
 
+	// perform 5 mixing rounds
 	for j <= 16 {
-		// mix r0
+		// mix up r0
 		r0 = r0 + c.k[j] + (r3 & r2) + ((^r3) & r1)
 		r0 = rotl16(r0, 1)
 		j++
 
-		// mix r1
+		// mix up r1
 		r1 = r1 + c.k[j] + (r0 & r3) + ((^r0) & r2)
 		r1 = rotl16(r1, 2)
 		j++
 
-		// mix r2
+		// mix up r2
 		r2 = r2 + c.k[j] + (r1 & r0) + ((^r1) & r3)
 		r2 = rotl16(r2, 3)
 		j++
 
-		// mix r3
+		// mix up r3
 		r3 = r3 + c.k[j] + (r2 & r1) + ((^r2) & r0)
 		r3 = rotl16(r3, 5)
 		j++
-
 	}
 
+	// perform 1 mashing round
 	r0 = r0 + c.k[r3&63]
 	r1 = r1 + c.k[r0&63]
 	r2 = r2 + c.k[r1&63]
 	r3 = r3 + c.k[r2&63]
 
+	// perform 6 mixing rounds
 	for j <= 40 {
-		// mix r0
+		// mix up r0
 		r0 = r0 + c.k[j] + (r3 & r2) + ((^r3) & r1)
 		r0 = rotl16(r0, 1)
 		j++
 
-		// mix r1
+		// mix up r1
 		r1 = r1 + c.k[j] + (r0 & r3) + ((^r0) & r2)
 		r1 = rotl16(r1, 2)
 		j++
 
-		// mix r2
+		// mix up r2
 		r2 = r2 + c.k[j] + (r1 & r0) + ((^r1) & r3)
 		r2 = rotl16(r2, 3)
 		j++
 
-		// mix r3
+		// mix up r3
 		r3 = r3 + c.k[j] + (r2 & r1) + ((^r2) & r0)
 		r3 = rotl16(r3, 5)
 		j++
-
 	}
 
+	// perform 1 mashing round
 	r0 = r0 + c.k[r3&63]
 	r1 = r1 + c.k[r0&63]
 	r2 = r2 + c.k[r1&63]
 	r3 = r3 + c.k[r2&63]
 
+	// perform 5 mixing rounds
 	for j <= 60 {
-		// mix r0
+		// mix up r0
 		r0 = r0 + c.k[j] + (r3 & r2) + ((^r3) & r1)
 		r0 = rotl16(r0, 1)
 		j++
 
-		// mix r1
+		// mix up r1
 		r1 = r1 + c.k[j] + (r0 & r3) + ((^r0) & r2)
 		r1 = rotl16(r1, 2)
 		j++
 
-		// mix r2
+		// mix up r2
 		r2 = r2 + c.k[j] + (r1 & r0) + ((^r1) & r3)
 		r2 = rotl16(r2, 3)
 		j++
 
-		// mix r3
+		// mix up r3
 		r3 = r3 + c.k[j] + (r2 & r1) + ((^r2) & r0)
 		r3 = rotl16(r3, 5)
 		j++
 	}
 
-	binary.LittleEndian.PutUint16(dst[0:], r0)
-	binary.LittleEndian.PutUint16(dst[2:], r1)
-	binary.LittleEndian.PutUint16(dst[4:], r2)
-	binary.LittleEndian.PutUint16(dst[6:], r3)
+	binary.LittleEndian.PutUint16(dst[0:2], r0)
+	binary.LittleEndian.PutUint16(dst[2:4], r1)
+	binary.LittleEndian.PutUint16(dst[4:6], r2)
+	binary.LittleEndian.PutUint16(dst[6:BlockSize], r3)
 }
 
 func (c *rc2Cipher) Decrypt(dst, src []byte) {
-
-	r0 := binary.LittleEndian.Uint16(src[0:])
-	r1 := binary.LittleEndian.Uint16(src[2:])
-	r2 := binary.LittleEndian.Uint16(src[4:])
-	r3 := binary.LittleEndian.Uint16(src[6:])
+	if len(src) < BlockSize {
+		panic("rc2: input not full block")
+	}
+	if len(dst) < BlockSize {
+		panic("rc2: output not full block")
+	}
+	if InexactOverlap(dst[:BlockSize], src[:BlockSize]) {
+		panic("rc2: invalid buffer overlap")
+	}
+	r0 := binary.LittleEndian.Uint16(src[0:2])
+	r1 := binary.LittleEndian.Uint16(src[2:4])
+	r2 := binary.LittleEndian.Uint16(src[4:6])
+	r3 := binary.LittleEndian.Uint16(src[6:BlockSize])
 
 	j := 63
 
+	// perform 5 r-mixing rounds
 	for j >= 44 {
 		// unmix r3
 		r3 = rotl16(r3, 16-5)
@@ -208,11 +263,13 @@ func (c *rc2Cipher) Decrypt(dst, src []byte) {
 		j--
 	}
 
+	// perform 1 r-mashing round
 	r3 = r3 - c.k[r2&63]
 	r2 = r2 - c.k[r1&63]
 	r1 = r1 - c.k[r0&63]
 	r0 = r0 - c.k[r3&63]
 
+	// perform 6 r-mixing rounds
 	for j >= 20 {
 		// unmix r3
 		r3 = rotl16(r3, 16-5)
@@ -233,15 +290,16 @@ func (c *rc2Cipher) Decrypt(dst, src []byte) {
 		r0 = rotl16(r0, 16-1)
 		r0 = r0 - c.k[j] - (r3 & r2) - ((^r3) & r1)
 		j--
-
 	}
 
+	// perform 1 r-mashing round
 	r3 = r3 - c.k[r2&63]
 	r2 = r2 - c.k[r1&63]
 	r1 = r1 - c.k[r0&63]
 	r0 = r0 - c.k[r3&63]
 
-	for j >= 0 {
+	// perform 5 r-mixing rounds
+	for j >= 3 {
 		// unmix r3
 		r3 = rotl16(r3, 16-5)
 		r3 = r3 - c.k[j] - (r2 & r1) - ((^r2) & r0)
@@ -261,11 +319,10 @@ func (c *rc2Cipher) Decrypt(dst, src []byte) {
 		r0 = rotl16(r0, 16-1)
 		r0 = r0 - c.k[j] - (r3 & r2) - ((^r3) & r1)
 		j--
-
 	}
 
-	binary.LittleEndian.PutUint16(dst[0:], r0)
-	binary.LittleEndian.PutUint16(dst[2:], r1)
-	binary.LittleEndian.PutUint16(dst[4:], r2)
-	binary.LittleEndian.PutUint16(dst[6:], r3)
+	binary.LittleEndian.PutUint16(dst[0:2], r0)
+	binary.LittleEndian.PutUint16(dst[2:4], r1)
+	binary.LittleEndian.PutUint16(dst[4:6], r2)
+	binary.LittleEndian.PutUint16(dst[6:BlockSize], r3)
 }

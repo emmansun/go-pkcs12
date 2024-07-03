@@ -73,7 +73,11 @@ func TestEncryptDecrypt(t *testing.T) {
 		p, _ := hex.DecodeString(tt.plain)
 		c, _ := hex.DecodeString(tt.cipher)
 
-		b, _ := New(k, tt.t1)
+		b, err := NewCipherWithEffectiveKeyBits(k, tt.t1)
+		if err != nil {
+			t.Errorf("New(%q, %d) failed: %v", tt.key, tt.t1, err)
+			continue
+		}
 
 		var dst [8]byte
 

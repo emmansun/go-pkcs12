@@ -66,7 +66,7 @@ func (shaWithTripleDESCBC) deriveIV(salt, password []byte, iterations int) []byt
 type shaWith128BitRC2CBC struct{}
 
 func (shaWith128BitRC2CBC) create(key []byte) (cipher.Block, error) {
-	return rc2.New(key, len(key)*8)
+	return rc2.NewCipher(key)
 }
 
 func (shaWith128BitRC2CBC) deriveKey(salt, password []byte, iterations int) []byte {
@@ -80,7 +80,7 @@ func (shaWith128BitRC2CBC) deriveIV(salt, password []byte, iterations int) []byt
 type shaWith40BitRC2CBC struct{}
 
 func (shaWith40BitRC2CBC) create(key []byte) (cipher.Block, error) {
-	return rc2.New(key, len(key)*8)
+	return rc2.NewCipher(key)
 }
 
 func (shaWith40BitRC2CBC) deriveKey(salt, password []byte, iterations int) []byte {

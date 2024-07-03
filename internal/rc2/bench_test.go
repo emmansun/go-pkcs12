@@ -9,7 +9,8 @@ import (
 )
 
 func BenchmarkEncrypt(b *testing.B) {
-	r, _ := New([]byte{0, 0, 0, 0, 0, 0, 0, 0}, 64)
+	r, _ := NewCipher([]byte{0, 0, 0, 0, 0, 0, 0, 0})
+	b.SetBytes(int64(8))
 	b.ResetTimer()
 	var src [8]byte
 	for i := 0; i < b.N; i++ {
@@ -18,7 +19,8 @@ func BenchmarkEncrypt(b *testing.B) {
 }
 
 func BenchmarkDecrypt(b *testing.B) {
-	r, _ := New([]byte{0, 0, 0, 0, 0, 0, 0, 0}, 64)
+	r, _ := NewCipher([]byte{0, 0, 0, 0, 0, 0, 0, 0})
+	b.SetBytes(int64(8))
 	b.ResetTimer()
 	var src [8]byte
 	for i := 0; i < b.N; i++ {
