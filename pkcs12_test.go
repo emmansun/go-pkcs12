@@ -164,7 +164,7 @@ func TestPfxWithModernCiphers(t *testing.T) {
 		if cert.Subject.CommonName != commonName {
 			t.Errorf("expected common name to be %q, but found %q", commonName, cert.Subject.CommonName)
 		}
-		
+
 		p12New, err := Modern2023.Encode(priv, cert, nil, "password")
 		if err != nil {
 			t.Fatal(err)
@@ -315,6 +315,65 @@ func TestPBES2_AES192CBC(t *testing.T) {
 	}
 	if len(caCerts) != 0 {
 		t.Errorf("unexpected # of caCerts: got %d, want 0", len(caCerts))
+	}
+}
+
+// PBE-SHA1-RC2-128
+const encryptedPkcs8Key1 = `-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIGxMBwGCiqGSIb3DQEMAQUwDgQIgGZ6tBRXF4oCAggABIGQ4w2KkYUWu7/d3hJk
+Ns7ZwCy2xZmIxmU9GTybuH7fXwP38UOYlG9uPeSlP5uB3Brf0tWxC4jmRCjs7weT
+gbAZ6PsB2Bm5uaGBcAcoWmcP6zZQ3ZRc1TLX2ZQ/f3Et6zQQdMVABxwnnzjt6fkG
+HupHzh20Yu+oSuih2xOeqgprJhJ55MiU3jK9ZKAamH+GUW3Z
+-----END ENCRYPTED PRIVATE KEY-----
+`
+
+// PBE-SHA1-3DES
+const encryptedPkcs8Key2 = `-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIGxMBwGCiqGSIb3DQEMAQMwDgQIkelJzp3UvagCAggABIGQYmxfWr/ltzkRXFti
+96cUiyjvQBSzKWp5RRrUIugBrdNc+3dRVuJKrg/D7uS/WHJm88cT+vjN35CC0Mj6
+gWm/m2Uif5caR/+xBG3cfR1viPk/xw+Wt1BDwhG6j3CavNf3xub5sUv4vC1/KuYB
+GmpyFm3DnvYQsX5vIrcF7HIXKJVYkf/KLlrzveOL90E0PZwI
+-----END ENCRYPTED PRIVATE KEY-----
+`
+
+// PBE-SHA1-RC2-40
+const encryptedPkcs8Key3 = `-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIGxMBwGCiqGSIb3DQEMAQYwDgQIqJHFfKsrifgCAggABIGQzYGZMUmqsmIQ+Kns
+A7pzTzvsDqWq54GAKtrCowNjYxd31WWjODQC35qB6gP+fAITlxKOB5QTiB5VDUW7
+V2Q3jvacDUBwl0zsPKNVKOGwHcQU0gkFKI60uKfiJ9+6ZcnVh3TLNTKec7c7tqIa
+ER59uC1RfTqtFRyRedYowSE3dodBNKtsYg+YF51Jes6gjCvM
+-----END ENCRYPTED PRIVATE KEY-----
+`
+
+const encryptedEC256aes128sha1 = `-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIHeMEkGCSqGSIb3DQEFDTA8MBsGCSqGSIb3DQEFDDAOBAgEoFG3x07DbQICCAAw
+HQYJYIZIAWUDBAECBBCRN9PNX9rBqXhaHLUOsv7YBIGQFfXAPPV+COWABJdSarog
+eUHFNaQ+R6x55Tz/mquNIwiOrP9DNoEd1PGtKaHaO+ACSEQwMfrGeh8BuNV69EwP
+bhsob/MZeexRbrLe2YN7Y7/Y0wpujalGlliMvs35f1fpq/9RfVU+qRpFED2lT4dm
+zOuhMC9Oo3oMYlbEXAT9mq33MkGKMUth2ek/bQIvnCHG
+-----END ENCRYPTED PRIVATE KEY-----
+`
+
+func TestParsePKCS8PrivateKey(t *testing.T) {
+	block, _ := pem.Decode([]byte(encryptedPkcs8Key1))
+	_, err := ParsePKCS8PrivateKey(block.Bytes, "12345678")
+	if err != nil {
+		t.Errorf("ParsePKCS8PrivateKey returned: %s", err)
+	}
+	block, _ = pem.Decode([]byte(encryptedPkcs8Key2))
+	_, err = ParsePKCS8PrivateKey(block.Bytes, "12345678")
+	if err != nil {
+		t.Errorf("ParsePKCS8PrivateKey returned: %s", err)
+	}
+	block, _ = pem.Decode([]byte(encryptedPkcs8Key3))
+	_, err = ParsePKCS8PrivateKey(block.Bytes, "12345678")
+	if err != nil {
+		t.Errorf("ParsePKCS8PrivateKey returned: %s", err)
+	}
+	block, _ = pem.Decode([]byte(encryptedEC256aes128sha1))
+	_, err = ParsePKCS8PrivateKey(block.Bytes, "password")
+	if err != nil {
+		t.Errorf("ParsePKCS8PrivateKey returned: %s", err)
 	}
 }
 

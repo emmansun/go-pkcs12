@@ -202,7 +202,7 @@ type pbkdf2Params struct {
 	Salt       asn1.RawValue
 	Iterations int
 	KeyLength  int `asn1:"optional"`
-	Prf        pkix.AlgorithmIdentifier
+	Prf        pkix.AlgorithmIdentifier `asn1:"optional"`
 }
 
 // pbes2CipherFor returns a cipher.Block for the given PBES2-params and password.

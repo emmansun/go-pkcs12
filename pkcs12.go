@@ -46,11 +46,12 @@ const DefaultPassword = "changeit"
 // defines several different Encoders with different parameters.
 // An Encoder is safe for concurrent use by multiple goroutines.
 type Encoder struct {
-	macAlgorithm         asn1.ObjectIdentifier // MAC digest algorithm: SHA1, SHA256 or SM3
+	macAlgorithm         asn1.ObjectIdentifier // MAC digest algorithm: SHA1, SHA256, SM3 for traditional PKCS#12, or PBMAC1
 	certAlgorithm        asn1.ObjectIdentifier // Certificate encryption pbe: PKCS12-PBE or PBES2
 	keyAlgorithm         asn1.ObjectIdentifier // Private Key encryption pbe: PKCS12-PBE or PBES2
 	kdfPrf               asn1.ObjectIdentifier // PBES2 PBKDF2 PRF
-	encryptionScheme     asn1.ObjectIdentifier // PBES2 encryption scheme
+	encryptionScheme     asn1.ObjectIdentifier // PBES2 encryption scheme, only used for PBES2
+	messageAuthScheme    asn1.ObjectIdentifier // PBMAC1 message authentication scheme, only used for PBMAC1
 	macIterations        int                   // MAC iteration count
 	encryptionIterations int                   // Encryption iteration count
 	saltLen              int                   // Length of salt for both MAC and encryption
@@ -183,13 +184,14 @@ var Modern2023 = &Encoder{
 
 // ShangMi2024 encodes PKCS#12 files using algorithms that are all ShangMi.
 // Private keys and certificates are encrypted using PBES2 with	 PBKDF2-HMAC-SM3 and SM4-CBC.
-// The MAC algorithm is HMAC-SM3.
+// The MAC algorithm is PBMAC1-HMAC-SM3.
 var ShangMi2024 = &Encoder{
-	macAlgorithm:         oidSM3,
+	macAlgorithm:         oidPBMAC1,
 	certAlgorithm:        oidPBES2,
 	keyAlgorithm:         oidPBES2,
 	kdfPrf:               oidHmacWithSM3,
 	encryptionScheme:     oidSM4CBC,
+	messageAuthScheme:    oidHmacWithSM3,
 	macIterations:        2048,
 	encryptionIterations: 2048,
 	saltLen:              16,
@@ -648,6 +650,29 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *smx509.Certific
 	return LegacyRC2.WithRand(rand).Encode(privateKey, certificate, caCerts, password)
 }
 
+func (enc *Encoder) computeMac(macData *macData, authenticatedSafeBytes, encodedPassword []byte) (err error) {
+	if enc.macAlgorithm != nil {
+		// compute the MAC
+		macData.Mac.Algorithm.Algorithm = enc.macAlgorithm
+		macData.MacSalt = make([]byte, enc.saltLen)
+		if _, err = enc.rand.Read(macData.MacSalt); err != nil {
+			return
+		}
+		if enc.macAlgorithm.Equal(oidPBMAC1) {
+			if macData.Mac.Algorithm.Parameters.FullBytes, err = createPBMAC1Parameters(enc.kdfPrf, enc.messageAuthScheme, macData.MacSalt, enc.macIterations); err != nil {
+				return
+			}
+			macData.MacSalt = []byte("NOT USED")
+			macData.Iterations = 1
+		} else {
+			macData.Iterations = enc.macIterations
+		}
+		err = computeMac(macData, authenticatedSafeBytes, encodedPassword)
+		return
+	}
+	return
+}
+
 // Encode produces pfxData containing one private key (privateKey), an
 // end-entity certificate (certificate), and any number of CA certificates
 // (caCerts).
@@ -736,17 +761,8 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *smx509.Certifica
 		return nil, err
 	}
 
-	if enc.macAlgorithm != nil {
-		// compute the MAC
-		pfx.MacData.Mac.Algorithm.Algorithm = enc.macAlgorithm
-		pfx.MacData.MacSalt = make([]byte, enc.saltLen)
-		if _, err = enc.rand.Read(pfx.MacData.MacSalt); err != nil {
-			return nil, err
-		}
-		pfx.MacData.Iterations = enc.macIterations
-		if err = computeMac(&pfx.MacData, authenticatedSafeBytes, encodedPassword); err != nil {
-			return nil, err
-		}
+	if err = enc.computeMac(&pfx.MacData, authenticatedSafeBytes, encodedPassword); err != nil {
+		return nil, err
 	}
 
 	pfx.AuthSafe.ContentType = oidDataContentType
@@ -903,17 +919,8 @@ func (enc *Encoder) EncodeTrustStoreEntries(entries []TrustStoreEntry, password 
 		return nil, err
 	}
 
-	if enc.macAlgorithm != nil {
-		// compute the MAC
-		pfx.MacData.Mac.Algorithm.Algorithm = enc.macAlgorithm
-		pfx.MacData.MacSalt = make([]byte, enc.saltLen)
-		if _, err = enc.rand.Read(pfx.MacData.MacSalt); err != nil {
-			return nil, err
-		}
-		pfx.MacData.Iterations = enc.macIterations
-		if err = computeMac(&pfx.MacData, authenticatedSafeBytes, encodedPassword); err != nil {
-			return nil, err
-		}
+	if err = enc.computeMac(&pfx.MacData, authenticatedSafeBytes, encodedPassword); err != nil {
+		return nil, err
 	}
 
 	pfx.AuthSafe.ContentType = oidDataContentType
@@ -992,4 +999,17 @@ func (encoder *Encoder) makeSafeContents(rand io.Reader, bags []safeBag, algoID 
 		}
 	}
 	return
+}
+
+// ParsePKCS8PrivateKey parses a PKCS#8, password-protected private key.
+// It supports part of PBE-PKCS12 & PBES2 algorithms.
+func ParsePKCS8PrivateKey(asn1Data []byte, password string) (privateKey interface{}, err error) {
+	if len(password) == 0 {
+		return smx509.ParsePKCS8PrivateKey(asn1Data)
+	}
+	encodedPassword, err := bmpStringZeroTerminated(password)
+	if err != nil {
+		return nil, err
+	}
+	return decodePkcs8ShroudedKeyBag(asn1Data, encodedPassword)
 }
