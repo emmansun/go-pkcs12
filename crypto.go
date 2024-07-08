@@ -56,11 +56,11 @@ func (shaWithTripleDESCBC) create(key []byte) (cipher.Block, error) {
 }
 
 func (shaWithTripleDESCBC) deriveKey(salt, password []byte, iterations int) []byte {
-	return pbkdf(sha1Sum, 20, 64, salt, password, iterations, 1, 24)
+	return pbkdfEncKey(sha1Hash, salt, password, iterations, 24)
 }
 
 func (shaWithTripleDESCBC) deriveIV(salt, password []byte, iterations int) []byte {
-	return pbkdf(sha1Sum, 20, 64, salt, password, iterations, 2, 8)
+	return pbkdfIV(sha1Hash, salt, password, iterations, 8)
 }
 
 type shaWith128BitRC2CBC struct{}
@@ -70,11 +70,11 @@ func (shaWith128BitRC2CBC) create(key []byte) (cipher.Block, error) {
 }
 
 func (shaWith128BitRC2CBC) deriveKey(salt, password []byte, iterations int) []byte {
-	return pbkdf(sha1Sum, 20, 64, salt, password, iterations, 1, 16)
+	return pbkdfEncKey(sha1Hash, salt, password, iterations, 16)
 }
 
 func (shaWith128BitRC2CBC) deriveIV(salt, password []byte, iterations int) []byte {
-	return pbkdf(sha1Sum, 20, 64, salt, password, iterations, 2, 8)
+	return pbkdfIV(sha1Hash, salt, password, iterations, 8)
 }
 
 type shaWith40BitRC2CBC struct{}
@@ -84,11 +84,11 @@ func (shaWith40BitRC2CBC) create(key []byte) (cipher.Block, error) {
 }
 
 func (shaWith40BitRC2CBC) deriveKey(salt, password []byte, iterations int) []byte {
-	return pbkdf(sha1Sum, 20, 64, salt, password, iterations, 1, 5)
+	return pbkdfEncKey(sha1Hash, salt, password, iterations, 5)
 }
 
 func (shaWith40BitRC2CBC) deriveIV(salt, password []byte, iterations int) []byte {
-	return pbkdf(sha1Sum, 20, 64, salt, password, iterations, 2, 8)
+	return pbkdfIV(sha1Hash, salt, password, iterations, 8)
 }
 
 type pbeParams struct {

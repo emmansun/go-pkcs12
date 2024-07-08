@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
+	"hash"
 	"math/big"
 
 	"github.com/emmansun/gmsm/sm3"
@@ -17,23 +18,17 @@ var (
 	one = big.NewInt(1)
 )
 
-// sha1Sum returns the SHA-1 hash of in.
-func sha1Sum(in []byte) []byte {
-	sum := sha1.Sum(in)
-	return sum[:]
+type hashFunc struct {
+	newHash func() hash.Hash
+	u       int
+	v       int
 }
 
-// sha256Sum returns the SHA-256 hash of in.
-func sha256Sum(in []byte) []byte {
-	sum := sha256.Sum256(in)
-	return sum[:]
-}
-
-// sm3Sum returns the SM3 hash of in.
-func sm3Sum(in []byte) []byte {
-	sum := sm3.Sum(in)
-	return sum[:]
-}
+var (
+	sha1Hash   = hashFunc{newHash: sha1.New, u: 20, v: 64}
+	sha256Hash = hashFunc{newHash: sha256.New, u: 32, v: 64}
+	sm3Hash    = hashFunc{newHash: sm3.New, u: 32, v: 64}
+)
 
 // fillWithRepeats returns v*ceiling(len(pattern) / v) bytes consisting of
 // repeats of pattern.
@@ -45,7 +40,22 @@ func fillWithRepeats(pattern []byte, v int) []byte {
 	return bytes.Repeat(pattern, (outputLen+len(pattern)-1)/len(pattern))[:outputLen]
 }
 
-func pbkdf(hash func([]byte) []byte, u, v int, salt, password []byte, r int, ID byte, size int) (key []byte) {
+func pbkdfEncKey(h hashFunc, salt, password []byte, r int, size int) (key []byte) {
+	return pbkdf(h, salt, password, r, 1, size)
+}
+
+func pbkdfIV(h hashFunc, salt, password []byte, r int, size int) (key []byte) {
+	return pbkdf(h, salt, password, r, 2, size)
+}
+
+func pbkdfMAC(h hashFunc, salt, password []byte, r int, size int) (key []byte) {
+	return pbkdf(h, salt, password, r, 3, size)
+}
+
+func pbkdf(h hashFunc, salt, password []byte, r int, ID byte, size int) (key []byte) {
+	hash := h.newHash()
+	u := h.u
+	v := h.v
 	// implementation of https://tools.ietf.org/html/rfc7292#appendix-B.2 , RFC text verbatim in comments
 
 	//    Let H be a hash function built around a compression function f:
@@ -91,7 +101,7 @@ func pbkdf(hash func([]byte) []byte, u, v int, salt, password []byte, r int, ID 
 
 	//    1.  Construct a string, D (the "diversifier"), by concatenating v/8
 	//        copies of ID.
-	var D []byte
+	D := make([]byte, 0, v)
 	for i := 0; i < v; i++ {
 		D = append(D, ID)
 	}
@@ -118,13 +128,18 @@ func pbkdf(hash func([]byte) []byte, u, v int, salt, password []byte, r int, ID 
 
 	//    6.  For i=1, 2, ..., c, do the following:
 	A := make([]byte, c*u)
-	var IjBuf []byte
+	Ai := make([]byte, hash.Size())
 	for i := 0; i < c; i++ {
 		//        A.  Set A2=H^r(D||I). (i.e., the r-th hash of D||1,
 		//            H(H(H(... H(D||I))))
-		Ai := hash(append(D, I...))
+		hash.Reset()
+		hash.Write(D)
+		hash.Write(I)
+		Ai := hash.Sum(Ai[:0])
 		for j := 1; j < r; j++ {
-			Ai = hash(Ai)
+			hash.Reset()
+			hash.Write(Ai)
+			Ai = hash.Sum(Ai[:0])
 		}
 		copy(A[i*u:], Ai[:])
 
@@ -148,25 +163,13 @@ func pbkdf(hash func([]byte) []byte, u, v int, salt, password []byte, r int, ID 
 					Ij.SetBytes(I[j*v : (j+1)*v])
 					Ij.Add(Ij, Bbi)
 					Ij.Add(Ij, one)
+
 					Ijb := Ij.Bytes()
-					// We expect Ijb to be exactly v bytes,
-					// if it is longer or shorter we must
-					// adjust it accordingly.
 					if len(Ijb) > v {
 						Ijb = Ijb[len(Ijb)-v:]
 					}
-					if len(Ijb) < v {
-						if IjBuf == nil {
-							IjBuf = make([]byte, v)
-						}
-						bytesShort := v - len(Ijb)
-						for i := 0; i < bytesShort; i++ {
-							IjBuf[i] = 0
-						}
-						copy(IjBuf[bytesShort:], Ijb)
-						Ijb = IjBuf
-					}
-					copy(I[j*v:(j+1)*v], Ijb)
+					Ij = Ij.SetBytes(Ijb)
+					Ij.FillBytes(I[j*v : (j+1)*v])
 				}
 			}
 		}

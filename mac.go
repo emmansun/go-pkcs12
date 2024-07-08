@@ -42,13 +42,13 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 	switch {
 	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA1):
 		hFn = sha1.New
-		key = pbkdf(sha1Sum, 20, 64, macData.MacSalt, password, macData.Iterations, 3, 20)
+		key = pbkdfMAC(sha1Hash, macData.MacSalt, password, macData.Iterations, 20)
 	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA256):
 		hFn = sha256.New
-		key = pbkdf(sha256Sum, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdfMAC(sha256Hash, macData.MacSalt, password, macData.Iterations, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(oidSM3):
 		hFn = sm3.New
-		key = pbkdf(sm3Sum, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdfMAC(sm3Hash, macData.MacSalt, password, macData.Iterations, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(oidPBMAC1):
 		var params pbmac1Params
 		var kdfparams pbkdf2Params
